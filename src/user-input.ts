@@ -26,7 +26,7 @@ export class UserInput {
     return this._value.join("");
   }
 
-  getUpdates(): boolean[] {
+  getUpdates(): readonly boolean[] {
     return this._updates;
   }
 
@@ -63,6 +63,10 @@ export class TextBox {
     return new TextBox(UserInput.from(input), 0);
   }
 
+  setUpdates(updates: boolean[]) {
+    return new TextBox(this.userInput.setUpdates(updates), this._caret);
+  }
+
   insert(value: string): TextBox {
     return new TextBox(
       this.userInput.insert(this._caret, value),
@@ -97,7 +101,7 @@ export class TextBox {
         "span",
         {
           class: {
-            "red-underline": isUpdate,
+            "is-updated": isUpdate,
             "caret-after": hasCaret,
           },
         },
@@ -115,6 +119,7 @@ export function handleTexboxKeyDown(
   event: KeyboardEvent,
   textBox: TextBox
 ): TextBox {
+  event.preventDefault();
   if (event.key === "Backspace") {
     return textBox.delete();
   } else if (event.key === "ArrowLeft") {

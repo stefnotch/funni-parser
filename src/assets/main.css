@@ -36,9 +36,8 @@ body {
   margin: 0.5rem;
   font-family: "Roboto Mono", monospace;
   white-space: pre-wrap;
-  & span.red-underline {
-    text-decoration: underline;
-    text-decoration-color: red;
+  & span.is-updated {
+    background-color: hsla(78, 64%, 37%, 0.418);
   }
   & span.caret-after {
     position: relative;
