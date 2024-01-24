@@ -114,7 +114,6 @@ export function lexer(input: Stream<[string, boolean]>): Token[] {
   function isBracket(value: string): boolean {
     return ["(", ")"].includes(value);
   }
-  return tokens;
 }
 
 export class ASTNode {
