@@ -15,16 +15,21 @@ const diagram = computed(() => {
 function RenderTextBox() {
   return editor.textBox.value.render();
 }
+function RenderDebugTextBox() {
+  return editor.debugTextBox.value.render();
+}
 </script>
 
 <template>
   <header>Parser</header>
 
   <main class="grid">
-    <div tabindex="0" @keydown="editor.handleKeyDown">
+    <div>
       <h3>Input</h3>
-      <RenderTextBox />
-
+      <div tabindex="0" @keydown="editor.handleKeyDown">
+        <RenderTextBox />
+      </div>
+      <RenderDebugTextBox />
       <h3>Ast</h3>
       <label>
         <input type="checkbox" v-model="showDiagram" /> Show diagram

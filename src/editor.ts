@@ -10,8 +10,8 @@ import { computed, ref, shallowRef } from "vue";
 import { Stream } from "./stream";
 
 class Editor {
-  tokens: Token[];
-  ast: ParserResult;
+  readonly tokens: Token[];
+  readonly ast: ParserResult;
 
   constructor(public textBox: TextBox) {
     this.tokens = lexer(new Stream(this.textBox.userInput.zipped()));
@@ -60,7 +60,10 @@ class Editor {
     return new Editor(newTextBox);
   }
 
-  handleKeyDown(event: KeyboardEvent): Editor {
+  handleKeyDown(event: KeyboardEvent): {
+    editor: Editor;
+    debugTextBox: TextBox;
+  } {
     const newEditor = (() => {
       event.preventDefault();
       if (event.key === "Backspace") {
@@ -85,19 +88,23 @@ class Editor {
       });
       return updates;
     });
-    return newEditor;
+    return { editor: newEditor, debugTextBox: newEditor.textBox };
   }
 }
 
 export function useEditor() {
   const editor = shallowRef(new Editor(TextBox.from("?3+4*(2-1)")));
+  const debugTextBox = shallowRef(TextBox.empty());
 
   function handleKeyDown(e: KeyboardEvent) {
-    editor.value = editor.value.handleKeyDown(e);
+    const result = editor.value.handleKeyDown(e);
+    editor.value = result.editor;
+    debugTextBox.value = result.debugTextBox;
   }
 
   return {
     textBox: computed(() => editor.value.textBox),
+    debugTextBox: computed(() => debugTextBox.value),
     userInput: computed(() => editor.value.textBox.userInput),
     tokens: computed(() => editor.value.tokens),
     ast: computed(() => editor.value.ast),
