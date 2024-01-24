@@ -24,6 +24,15 @@ export class Stream<T> {
     return None();
   }
 
+  nextIf(predicate: (value: T) => boolean): Option<T> {
+    if (this._current < this._stream.length) {
+      if (predicate(this._stream[this._current])) {
+        return Ok(this._stream[this._current++]);
+      }
+    }
+    return None();
+  }
+
   lastIndex(): Option<number> {
     if (this._current > 0) {
       return Ok(this._current - 1);

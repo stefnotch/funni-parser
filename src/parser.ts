@@ -1,8 +1,8 @@
 import { None, Some, type Option, Result, Ok, Err } from "./result";
 import type { Stream } from "./stream";
 
-type Token = {
-  type: "number" | "variable" | "operator" | "bracket" | "error";
+export type Token = {
+  type: "number" | "variable" | "operator" | "bracket" | "whitespace" | "error";
   value: string;
   range: [number, number];
   isEdited: boolean;
@@ -116,28 +116,61 @@ export function lexer(input: Stream<[string, boolean]>): Token[] {
   }
 }
 
-export class ASTNode {
-  type: "number" | "variable" | "operation" | "has-error" | "error";
-  value: string;
-  children: ASTNode[];
-  range: [number, number];
+export type ASTNode = ASTContainerNode | ASTTokenNode;
 
+export class ASTContainerNode {
   constructor(
-    type: "number" | "variable" | "operation" | "has-error" | "error",
-    value: string,
-    children: ASTNode[],
-    range: [number, number]
-  ) {
-    this.type = type;
-    this.value = value;
-    this.children = children;
-    this.range = range;
+    public readonly type: "operation" | "brackets" | "has-error",
+    public readonly children: ASTNode[],
+    public readonly range: readonly [number, number]
+  ) {}
+}
+
+export class ASTTokenNode {
+  constructor(
+    public readonly type:
+      | "number"
+      | "variable"
+      | "bracket"
+      | "operator"
+      | "whitespace"
+      | "error",
+    public readonly value: string,
+    public readonly range: readonly [number, number]
+  ) {}
+
+  static fromToken(
+    token: Token & { type: ASTTokenNode["type"] }
+  ): ASTTokenNode {
+    return new ASTTokenNode(token.type, token.value, token.range);
   }
 }
 
 export type ParserResult = ASTNode;
 
 export function parse(tokens: Stream<Token>): ParserResult {
+  function parseWithRecovery(): ParserResult {
+    let ast = parseExpression();
+    if (tokens.peek().isErr()) {
+      return ast;
+    } else {
+      // There are still tokens left
+      const next = parseWithRecovery();
+      return new ASTContainerNode(
+        "has-error",
+        [
+          ast,
+          new ASTTokenNode("error", "Missing operator", [
+            ast.range[1],
+            ast.range[1],
+          ]),
+          next,
+        ],
+        [ast.range[0], next.range[1]]
+      );
+    }
+  }
+
   function parseExpression(): ParserResult {
     let node = parseTerm();
     while (
@@ -146,12 +179,11 @@ export function parse(tokens: Stream<Token>): ParserResult {
         .map((token) => token.type === "operator")
         .unwrapOr(false)
     ) {
-      const operator = tokens.next().unwrap();
+      const operator = ASTTokenNode.fromToken(tokens.next().unwrap());
       const right = parseTerm();
-      node = new ASTNode(
+      node = new ASTContainerNode(
         "operation",
-        operator.value,
-        [node, right],
+        [node, operator, right],
         [node.range[0], right.range[1]]
       );
     }
@@ -159,41 +191,51 @@ export function parse(tokens: Stream<Token>): ParserResult {
     return node;
   }
 
+  function parseTermBrackets(openingBracket: ASTTokenNode): ParserResult {
+    const next = parseExpression();
+    const closingBracket = tokens
+      .nextIf((token) => token.value === ")" && token.type === "bracket")
+      .map(ASTTokenNode.fromToken);
+
+    if (closingBracket.isErr()) {
+      return new ASTContainerNode(
+        "has-error",
+        [
+          openingBracket,
+          next,
+          new ASTTokenNode("error", "Missing closing bracket", [
+            next.range[1],
+            next.range[1],
+          ]),
+        ],
+        [openingBracket.range[0], next.range[1]]
+      );
+    }
+    return new ASTContainerNode(
+      "brackets",
+      [openingBracket, next, closingBracket.unwrap()],
+      [openingBracket.range[0], closingBracket.unwrap().range[1]]
+    );
+  }
+
   function parseTerm(): ParserResult {
     return tokens
       .next()
       .map((token): ParserResult => {
         if (token.type === "number" || token.type === "variable") {
-          return new ASTNode(token.type, token.value, [], token.range);
+          return ASTTokenNode.fromToken(token);
         } else if (token.type === "bracket" && token.value === "(") {
-          const next = parseExpression();
-          if (
-            tokens
-              .peek()
-              .map((token) => token.type === "bracket" && token.value === ")")
-              .unwrapOr(false)
-          ) {
-            tokens.next().unwrap();
-            return next;
-          } else {
-            return new ASTNode(
-              "has-error",
-              "",
-              [next, new ASTNode("error", ")", [], [0, 0])],
-              [token.range[0], next.range[1]]
-            );
-          }
+          return parseTermBrackets(ASTTokenNode.fromToken(token));
         } else {
-          return new ASTNode(
+          return new ASTContainerNode(
             "has-error",
-            "",
-            [new ASTNode("error", token.value, [], token.range)],
+            [new ASTTokenNode("error", token.value, token.range)],
             token.range
           );
         }
       })
-      .unwrapOr(new ASTNode("error", "", [], [0, 0]));
+      .unwrapOr(new ASTTokenNode("error", "Missing term", [0, 0]));
   }
 
-  return parseExpression();
+  return parseWithRecovery();
 }

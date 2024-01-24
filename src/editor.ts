@@ -1,22 +1,56 @@
-import { TextBox, handleTexboxKeyDown, type UserInput } from "./user-input";
-import { lexer, parse, type ParserResult } from "./parser";
+import { TextBox, type UserInput } from "./user-input";
+import { lexer, parse, type ParserResult, type Token } from "./parser";
 import { computed, ref, shallowRef } from "vue";
 import { Stream } from "./stream";
 
-export function useEditor() {
-  const textBox = shallowRef(TextBox.from("3+4*(2-1)"));
-  const tokens = shallowRef(
-    lexer(new Stream(textBox.value.userInput.zipped()))
-  );
-  const ast = shallowRef(parse(new Stream(tokens.value)));
+class Editor {
+  tokens: Token[];
+  ast: ParserResult;
 
-  function handleKeyDown(e: KeyboardEvent) {
-    let newTextBox = handleTexboxKeyDown(e, textBox.value);
-    const newTokens = lexer(new Stream(newTextBox.userInput.zipped()));
-    const newAst = parse(new Stream(newTokens));
+  constructor(public textBox: TextBox) {
+    this.tokens = lexer(new Stream(this.textBox.userInput.zipped()));
+    this.ast = parse(new Stream(this.tokens));
+  }
 
-    let updates = newTextBox.userInput.getUpdates().slice();
-    newTokens.forEach((token) => {
+  private delete(): Editor {
+    const newTextBox = this.textBox.delete();
+    // TODO: Invalidate token
+    // TODO: Invalidate based on ast
+    return new Editor(newTextBox);
+  }
+
+  private insert(value: string): Editor {
+    const newTextBox = this.textBox.insert(value);
+    return new Editor(newTextBox);
+  }
+
+  private moveLeft(): Editor {
+    const newTextBox = this.textBox.moveLeft();
+    return new Editor(newTextBox);
+  }
+
+  private moveRight(): Editor {
+    const newTextBox = this.textBox.moveRight();
+    return new Editor(newTextBox);
+  }
+
+  handleKeyDown(event: KeyboardEvent): Editor {
+    const newEditor = (() => {
+      event.preventDefault();
+      if (event.key === "Backspace") {
+        return this.delete();
+      } else if (event.key === "ArrowLeft") {
+        return this.moveLeft();
+      } else if (event.key === "ArrowRight") {
+        return this.moveRight();
+      } else if (event.key.length === 1) {
+        return this.insert(event.key);
+      }
+      return this;
+    })();
+
+    let updates = newEditor.textBox.userInput.getUpdates().slice();
+    newEditor.tokens.forEach((token) => {
       if (token.type === "error") {
         return;
       }
@@ -24,18 +58,22 @@ export function useEditor() {
         updates[i] = false;
       }
     });
-    newTextBox = newTextBox.setUpdates(updates);
+    return new Editor(newEditor.textBox.setUpdates(updates));
+  }
+}
 
-    textBox.value = newTextBox;
-    tokens.value = newTokens;
-    ast.value = newAst;
+export function useEditor() {
+  const editor = shallowRef(new Editor(TextBox.from("?3+4*(2-1)")));
+
+  function handleKeyDown(e: KeyboardEvent) {
+    editor.value = editor.value.handleKeyDown(e);
   }
 
   return {
-    textBox,
-    userInput: computed(() => textBox.value.userInput),
-    tokens,
-    ast,
+    textBox: computed(() => editor.value.textBox),
+    userInput: computed(() => editor.value.textBox.userInput),
+    tokens: computed(() => editor.value.tokens),
+    ast: computed(() => editor.value.ast),
     handleKeyDown,
   };
 }

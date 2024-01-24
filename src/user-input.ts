@@ -59,6 +59,10 @@ export class UserInput {
 export class TextBox {
   constructor(public userInput: UserInput, private _caret: number) {}
 
+  static empty(): TextBox {
+    return new TextBox(UserInput.from(""), 0);
+  }
+
   static from(input: string): TextBox {
     return new TextBox(UserInput.from(input), 0);
   }
@@ -113,21 +117,4 @@ export class TextBox {
     }
     return h("div", { class: "text-box" }, children);
   }
-}
-
-export function handleTexboxKeyDown(
-  event: KeyboardEvent,
-  textBox: TextBox
-): TextBox {
-  event.preventDefault();
-  if (event.key === "Backspace") {
-    return textBox.delete();
-  } else if (event.key === "ArrowLeft") {
-    return textBox.moveLeft();
-  } else if (event.key === "ArrowRight") {
-    return textBox.moveRight();
-  } else if (event.key.length === 1) {
-    return textBox.insert(event.key);
-  }
-  return textBox;
 }

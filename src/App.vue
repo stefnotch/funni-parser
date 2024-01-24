@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useEditor } from "./editor";
+import { astToDiagram } from "./ast-to-diagram";
+// @ts-ignore
+import VueMermaidString from "vue-mermaid-string";
 
 const editor = useEditor();
+
+const showDiagram = ref(true);
+const diagram = computed(() => {
+  return astToDiagram(editor.ast.value);
+});
 
 function RenderTextBox() {
   return editor.textBox.value.render();
@@ -16,6 +24,12 @@ function RenderTextBox() {
     <div tabindex="0" @keydown="editor.handleKeyDown">
       <h3>Input</h3>
       <RenderTextBox />
+
+      <h3>Ast</h3>
+      <label>
+        <input type="checkbox" v-model="showDiagram" /> Show diagram
+      </label>
+      <VueMermaidString v-if="showDiagram" :value="diagram" />
     </div>
     <div class="grid">
       <div>
