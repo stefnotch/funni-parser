@@ -1,5 +1,6 @@
 import { None, Some, type Option, Result, Ok, Err } from "./result";
 import type { Stream } from "./stream";
+import { assertUnreachable } from "./utils/assert";
 
 export type Token = {
   type: "number" | "variable" | "operator" | "bracket" | "whitespace" | "error";
@@ -29,16 +30,10 @@ export function lexer(input: Stream<[string, boolean]>): Token[] {
       let number = nextValue[0];
       let isEdited = nextValue[1];
       while (true) {
-        let peek = input.peek().andThen((v): Option<[string, boolean]> => {
-          if (isDigit(v[0])) {
-            return Some(v);
-          }
-          return None();
-        });
-        if (peek.isOk()) {
-          input.next();
-          number += peek.unwrap()[0];
-          isEdited = isEdited || peek.unwrap()[1];
+        let nextDigit = input.nextIf((v) => isDigit(v[0]));
+        if (nextDigit.isOk()) {
+          number += nextDigit.unwrap()[0];
+          isEdited = isEdited || nextDigit.unwrap()[1];
         } else {
           break;
         }
@@ -53,16 +48,10 @@ export function lexer(input: Stream<[string, boolean]>): Token[] {
       let identifier = nextValue[0];
       let isEdited = nextValue[1];
       while (true) {
-        let peek = input.peek().andThen((v): Option<[string, boolean]> => {
-          if (isIdentifierContinue(v[0])) {
-            return Some(v);
-          }
-          return None();
-        });
-        if (peek.isOk()) {
-          input.next();
-          identifier += peek.unwrap()[0];
-          isEdited = isEdited || peek.unwrap()[1];
+        let nextChar = input.nextIf((v) => isIdentifierContinue(v[0]));
+        if (nextChar.isOk()) {
+          identifier += nextChar.unwrap()[0];
+          isEdited = isEdited || nextChar.unwrap()[1];
         } else {
           break;
         }
@@ -124,6 +113,52 @@ export class ASTContainerNode {
     public readonly children: ASTNode[],
     public readonly range: readonly [number, number]
   ) {}
+
+  getErrors(): ASTTokenNode[] {
+    return this.children.flatMap((child) => child.getErrors());
+  }
+
+  getAffectedRanges(
+    operation: "delete" | "insert",
+    index: number
+  ): [number, number][] {
+    /*
+    If the token is
+    `ab`
+    then the range values are
+    `234`
+    Deleting to the left means that 3 and 4 affect the range.
+    Only inserting at 3 affects the ranges.
+    */
+    if (!canAffectRanges(operation, index, this.range)) return [];
+
+    if (this.type === "operation") {
+      return this.children.flatMap((v) =>
+        v.getAffectedRanges(operation, index)
+      );
+    } else if (this.type === "brackets") {
+      const affectsBrackets = this.children.some(
+        (child) =>
+          child.type === "bracket" &&
+          canAffectRanges(operation, index, child.range)
+      );
+      if (affectsBrackets) {
+        return this.children.flatMap((child) =>
+          child.type === "bracket" ? [child.getRange()] : []
+        );
+      } else {
+        return this.children.flatMap((v) =>
+          v.getAffectedRanges(operation, index)
+        );
+      }
+    } else if (this.type === "has-error") {
+      return this.children.flatMap((v) =>
+        v.getAffectedRanges(operation, index)
+      );
+    } else {
+      assertUnreachable(this.type);
+    }
+  }
 }
 
 export class ASTTokenNode {
@@ -143,6 +178,40 @@ export class ASTTokenNode {
     token: Token & { type: ASTTokenNode["type"] }
   ): ASTTokenNode {
     return new ASTTokenNode(token.type, token.value, token.range);
+  }
+
+  getErrors(): ASTTokenNode[] {
+    if (this.type === "error") {
+      return [this];
+    } else {
+      return [];
+    }
+  }
+
+  getAffectedRanges(
+    operation: "delete" | "insert",
+    index: number
+  ): [number, number][] {
+    if (!canAffectRanges(operation, index, this.range)) return [];
+    return [this.getRange()];
+  }
+
+  getRange(): [number, number] {
+    return [this.range[0], this.range[1]];
+  }
+}
+
+function canAffectRanges(
+  operation: "delete" | "insert",
+  index: number,
+  range: readonly [number, number]
+): boolean {
+  if (operation === "delete") {
+    return range[0] < index && index <= range[1];
+  } else if (operation === "insert") {
+    return range[0] < index && index < range[1];
+  } else {
+    assertUnreachable(operation);
   }
 }
 

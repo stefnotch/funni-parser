@@ -1,5 +1,11 @@
 import { TextBox, type UserInput } from "./user-input";
-import { lexer, parse, type ParserResult, type Token } from "./parser";
+import {
+  lexer,
+  parse,
+  type ASTNode,
+  type ParserResult,
+  type Token,
+} from "./parser";
 import { computed, ref, shallowRef } from "vue";
 import { Stream } from "./stream";
 
@@ -13,13 +19,33 @@ class Editor {
   }
 
   private delete(): Editor {
+    this.textBox = this.textBox.withUpdates((v) => {
+      let updates = v.slice();
+      this.ast
+        .getAffectedRanges("delete", this.textBox.caretOffset)
+        .forEach((range) => {
+          for (let i = range[0]; i < range[1]; i++) {
+            updates[i] = true;
+          }
+        });
+      return updates;
+    });
     const newTextBox = this.textBox.delete();
-    // TODO: Invalidate token
-    // TODO: Invalidate based on ast
     return new Editor(newTextBox);
   }
 
   private insert(value: string): Editor {
+    this.textBox = this.textBox.withUpdates((v) => {
+      let updates = v.slice();
+      this.ast
+        .getAffectedRanges("insert", this.textBox.caretOffset)
+        .forEach((range) => {
+          for (let i = range[0]; i < range[1]; i++) {
+            updates[i] = true;
+          }
+        });
+      return updates;
+    });
     const newTextBox = this.textBox.insert(value);
     return new Editor(newTextBox);
   }
@@ -49,16 +75,17 @@ class Editor {
       return this;
     })();
 
-    let updates = newEditor.textBox.userInput.getUpdates().slice();
-    newEditor.tokens.forEach((token) => {
-      if (token.type === "error") {
-        return;
-      }
-      for (let i = token.range[0]; i < token.range[1]; i++) {
-        updates[i] = false;
-      }
+    const newTextBox = newEditor.textBox.withUpdates((v) => {
+      // Set the "updates" to "everything parsed fine, except for the errors"
+      let updates = new Array<boolean>(v.length).fill(false);
+      newEditor.ast.getErrors().forEach((token) => {
+        for (let i = token.range[0]; i < token.range[1]; i++) {
+          updates[i] = true;
+        }
+      });
+      return updates;
     });
-    return new Editor(newEditor.textBox.setUpdates(updates));
+    return newEditor;
   }
 }
 

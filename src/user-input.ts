@@ -59,6 +59,10 @@ export class UserInput {
 export class TextBox {
   constructor(public userInput: UserInput, private _caret: number) {}
 
+  get caretOffset(): number {
+    return this._caret;
+  }
+
   static empty(): TextBox {
     return new TextBox(UserInput.from(""), 0);
   }
@@ -67,8 +71,12 @@ export class TextBox {
     return new TextBox(UserInput.from(input), 0);
   }
 
-  setUpdates(updates: boolean[]) {
-    return new TextBox(this.userInput.setUpdates(updates), this._caret);
+  withUpdates(
+    callback: (updates: readonly boolean[]) => boolean[] | null
+  ): TextBox {
+    const newUpdates = callback(this.userInput.getUpdates());
+    if (newUpdates === null) return this;
+    return new TextBox(this.userInput.setUpdates(newUpdates), this._caret);
   }
 
   insert(value: string): TextBox {

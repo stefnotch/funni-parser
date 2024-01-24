@@ -1,9 +1,4 @@
-import { type Option, Ok, Err, Result, None } from "./result";
-
-// Write a stream class with the following API:
-// - constructor(stream: T[])
-// - peek(): Option<T>
-// - next(): Option<T>
+import { type Option, Ok, None } from "./result";
 
 export class Stream<T> {
   private _current = 0;
